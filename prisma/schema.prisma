@@ -1,0 +1,288 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum ProviderStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum VehicleStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  SUSPENDED
+  UNAVAILABLE
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  HYBRID
+  ELECTRIC
+}
+
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String
+  phone String?
+  role Role @default(CUSTOMER)
+  emailVerifiedAt DateTime?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company RentalCompany?
+  favorites Favorite[]
+  bookings Booking[] @relation("CustomerBookings")
+  reviews Review[] @relation("CustomerReviews")
+  payments Payment[]
+  auditLogs AdminAuditLog[] @relation("AdminActions")
+  @@index([role, isActive])
+}
+
+model RentalCompany {
+  id String @id @default(cuid())
+  ownerId String @unique
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  name String
+  slug String @unique
+  registrationNumber String?
+  district String
+  city String
+  address String
+  whatsapp String
+  telephone String?
+  email String
+  description String?
+  logoUrl String?
+  coverUrl String?
+  openingHours String?
+  status ProviderStatus @default(PENDING)
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  vehicles Vehicle[]
+  subscriptions Subscription[]
+  @@index([district, status])
+}
+
+model VehicleType {
+  id String @id @default(cuid())
+  name String @unique
+  slug String @unique
+  active Boolean @default(true)
+  displayOrder Int @default(0)
+  createdAt DateTime @default(now())
+  vehicles Vehicle[]
+}
+
+model Vehicle {
+  id String @id @default(cuid())
+  companyId String
+  company RentalCompany @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  typeId String
+  type VehicleType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  title String
+  slug String @unique
+  brand String
+  model String
+  year Int
+  district String
+  city String
+  pickupLocation String
+  dailyRate Int
+  weeklyRate Int?
+  refundableDeposit Int?
+  seats Int
+  transmission Transmission
+  fuelType FuelType
+  airConditioning Boolean @default(true)
+  driverAvailable Boolean @default(false)
+  selfDrive Boolean @default(true)
+  description String
+  terms String
+  status VehicleStatus @default(DRAFT)
+  isFeatured Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  images VehicleImage[]
+  favorites Favorite[]
+  bookings Booking[]
+  reviews Review[]
+  @@index([district, typeId, status])
+  @@index([companyId, status])
+  @@index([dailyRate])
+}
+
+model VehicleImage {
+  id String @id @default(cuid())
+  vehicleId String
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  url String
+  alt String?
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Favorite {
+  userId String
+  vehicleId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([userId, vehicleId])
+}
+
+model Booking {
+  id String @id @default(cuid())
+  vehicleId String
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  customerId String
+  customer User @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  pickupDate DateTime
+  returnDate DateTime
+  pickupLocation String
+  customerName String
+  phone String
+  email String
+  message String?
+  estimatedTotal Int
+  status BookingStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  review Review?
+  @@index([vehicleId, status, pickupDate, returnDate])
+  @@index([customerId, createdAt])
+}
+
+model Review {
+  id String @id @default(cuid())
+  bookingId String @unique
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  vehicleId String
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  customerId String
+  customer User @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Restrict)
+  rating Int
+  comment String?
+  createdAt DateTime @default(now())
+  @@index([vehicleId, createdAt])
+}
+
+model SubscriptionPlan {
+  id String @id @default(cuid())
+  name String
+  code String @unique
+  description String
+  durationMonths Int
+  price Int
+  currency String @default("LKR")
+  listingLimit Int
+  featuredListingLimit Int @default(0)
+  features Json
+  active Boolean @default(true)
+  recommended Boolean @default(false)
+  displayOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id String @id @default(cuid())
+  companyId String
+  company RentalCompany @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  planId String
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status SubscriptionStatus @default(PENDING)
+  startsAt DateTime?
+  expiresAt DateTime?
+  amountPaid Int
+  currency String @default("LKR")
+  planSnapshot Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payments Payment[]
+  @@index([companyId, status, expiresAt])
+}
+
+model Payment {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subscriptionId String
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  reference String @unique
+  provider String
+  providerReference String? @unique
+  amount Int
+  currency String @default("LKR")
+  status PaymentStatus @default(PENDING)
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+}
+
+model AdminAuditLog {
+  id String @id @default(cuid())
+  adminId String
+  admin User @relation("AdminActions", fields: [adminId], references: [id], onDelete: Restrict)
+  action String
+  entityType String
+  entityId String
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([entityType, entityId])
+}
+
+model PlatformSetting {
+  key String @id
+  value String
+  updatedAt DateTime @updatedAt
+}
